@@ -7,6 +7,8 @@ import app.revanced.patcher.patch.bytecodePatch
 import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.WideLiteralInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.RegisterRangeInstruction
 import com.android.tools.smali.dexlib2.AccessFlags
 
 val gifCommentsPatch = bytecodePatch(
@@ -88,6 +90,94 @@ val gifCommentsPatch = bytecodePatch(
         }
         check(editorHooks>0){"Native comment editor was not found"}
         println("GIF picker: installed $editorHooks native editor hooks")
+        // Elements/full-screen composers may never look up the legacy comment ID.
+        // Observe EditText construction, then qualify the attached editor at runtime.
+        val editTypes=mutableSetOf("Landroid/widget/EditText;")
+        var expanded=true
+        while(expanded) {
+            expanded=false
+            for(cls in classDefs.toList()) if(cls.superclass in editTypes && editTypes.add(cls.type)) expanded=true
+        }
+        var constructedEditors=0
+        for(cls in classDefs.toList()) {
+            if(cls.type.startsWith("Lapp/revanced/gifcomments/"))continue
+            val candidates=cls.methods.filter { method -> method.implementation?.instructions?.any {
+                val ref=it.methodReference
+                ref?.name=="<init>" && ref.definingClass in editTypes && ref.definingClass!=cls.type
+            }==true }
+            if(candidates.isEmpty())continue
+            val mutable=classDefs.getOrReplaceMutable(cls)
+            for(candidate in candidates) {
+                val method=mutable.methods.single { it.name==candidate.name && it.parameterTypes==candidate.parameterTypes && it.returnType==candidate.returnType }
+                val inserts=method.implementation!!.instructions.withIndex().mapNotNull { (index,instruction) ->
+                    val ref=instruction.methodReference
+                    if(ref?.name!="<init>" || ref.definingClass !in editTypes || ref.definingClass==cls.type) null
+                    // For super() in an EditText subclass, defer until its own constructor returns.
+                    else if(method.name=="<init>" && cls.type in editTypes) null
+                    else {
+                        val r=when(instruction) {
+                            is FiveRegisterInstruction -> instruction.registerC
+                            is RegisterRangeInstruction -> instruction.startRegister
+                            else -> error("Unexpected constructor instruction")
+                        }
+                        Pair(index+1,r)
+                    }
+                }.toList()
+                for((index,r) in inserts.sortedByDescending { it.first }) {
+                    method.addInstructions(index,"invoke-static/range { v$r .. v$r }, Lapp/revanced/gifcomments/GifPicker;->observe(Landroid/view/View;)V")
+                    constructedEditors++
+                }
+            }
+            if(cls.type in editTypes) for(method in mutable.methods.filter { it.name=="<init>" && it.implementation!=null }) {
+                val returns=method.implementation!!.instructions.withIndex().filter { it.value.opcode==Opcode.RETURN_VOID }.map { it.index }.toList()
+                for(index in returns.asReversed()) {
+                    method.addInstructions(index,"invoke-static/range { p0 .. p0 }, Lapp/revanced/gifcomments/GifPicker;->observe(Landroid/view/View;)V")
+                    constructedEditors++
+                }
+            }
+        }
+        check(constructedEditors>0){"No EditText construction hooks found"}
+        println("GIF picker: installed $constructedEditors construction hooks for full-screen editors")
+        // Framework layout inflation can create a plain EditText without an app constructor call.
+        // Cover activity decor roots and separate Dialog windows as well.
+        val activity=classDefs.single { it.type=="Lcom/google/android/apps/youtube/app/watchwhile/MainActivity;" }
+        val mainActivity=classDefs.getOrReplaceMutable(activity)
+        val onCreate=mainActivity.methods.single { it.name=="onCreate" && it.parameterTypes==listOf("Landroid/os/Bundle;") }
+        val activityReturns=onCreate.implementation!!.instructions.withIndex().filter { it.value.opcode==Opcode.RETURN_VOID }.map { it.index }.toList()
+        for(index in activityReturns.asReversed())onCreate.addInstructions(index,"invoke-static/range { p0 .. p0 }, Lapp/revanced/gifcomments/GifPicker;->watchActivity(Landroid/app/Activity;)V")
+        val dialogTypes=mutableSetOf("Landroid/app/Dialog;")
+        expanded=true
+        while(expanded) {
+            expanded=false
+            for(cls in classDefs.toList())if(cls.superclass in dialogTypes && dialogTypes.add(cls.type))expanded=true
+        }
+        var dialogHooks=0
+        for(cls in classDefs.toList()) {
+            if(cls.type.startsWith("Lapp/revanced/gifcomments/"))continue
+            val candidates=cls.methods.filter { method -> method.implementation?.instructions?.any {
+                val ref=it.methodReference
+                ref?.name=="show" && ref.parameterTypes.isEmpty() && ref.definingClass in dialogTypes
+            }==true }
+            if(candidates.isEmpty())continue
+            val mutable=classDefs.getOrReplaceMutable(cls)
+            for(candidate in candidates) {
+                val method=mutable.methods.single { it.name==candidate.name && it.parameterTypes==candidate.parameterTypes && it.returnType==candidate.returnType }
+                val inserts=method.implementation!!.instructions.withIndex().mapNotNull { (index,instruction) ->
+                    val ref=instruction.methodReference
+                    if(ref?.name!="show" || ref.parameterTypes.isNotEmpty() || ref.definingClass !in dialogTypes)null
+                    else Pair(index+1,when(instruction) {
+                        is FiveRegisterInstruction -> instruction.registerC
+                        is RegisterRangeInstruction -> instruction.startRegister
+                        else -> error("Unexpected dialog show instruction")
+                    })
+                }.toList()
+                for((index,r) in inserts.sortedByDescending { it.first }) {
+                    method.addInstructions(index,"invoke-static/range { v$r .. v$r }, Lapp/revanced/gifcomments/GifPicker;->watchDialog(Landroid/app/Dialog;)V")
+                    dialogHooks++
+                }
+            }
+        }
+        println("GIF picker: activity decor and $dialogHooks dialog window hooks")
         var transportHooks=0
         for(cls in classDefs.toList()) {
             val candidates=cls.methods.filter { method ->

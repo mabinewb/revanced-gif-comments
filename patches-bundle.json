@@ -1,7 +1,7 @@
 {
-  "download_url": "https://github.com/mabinewb/revanced-gif-comments/releases/download/v0.2.0/gif-comments-0.2.0.rvp",
-  "created_at": "2026-10-14T06:00:04",
+  "download_url": "https://github.com/mabinewb/revanced-gif-comments/releases/download/v0.2.1/gif-comments-0.2.1.rvp",
+  "created_at": "2026-10-14T06:31:41",
   "signature_download_url": null,
-  "description": "Experimental GIF picker and Cronet transport fix; 0.1.0 is broken. Device posting remains unverified.",
-  "version": "0.2.0"
+  "description": "Experimental comment editor discovery and GIF button fix for full-screen and bottom dialogs; device UI and posting remain unverified.",
+  "version": "0.2.1"
 }
