@@ -70,6 +70,10 @@ public final class GifCommentsTest {
         GifComments.rewrite(normalBuilder);
         require(Arrays.equals(normalBefore, normalBuilder.buildPartial().toByteArray()), "Normal builder unchanged");
         require(oldBuilder.getValue().equals(ByteString.copyFromUtf8("opaque-params")), "Known protobuf fields preserved");
+        byte[] selected=GifComments.rewriteSelectedPayload(payload("안녕"),"안녕","14083772942551242087");
+        require(field(selected,32).equals("14083772942551242087"),"Selected draft protobuf attachment");
+        require(field(selected,3).equals("안녕"),"Selected draft protobuf text preserved");
+        byte[] other=payload("다른 초안");require(GifComments.rewriteSelectedPayload(other,"안녕","123")==other,"Other draft protobuf unchanged");
         System.out.println("Passed " + tests + " assertions");
     }
 }

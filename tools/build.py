@@ -51,26 +51,39 @@ def main():
     if not (kotlin / 'lib/kotlin-compiler.jar').exists():
         with zipfile.ZipFile(files['kotlin']) as archive:
             archive.extractall(CACHE / 'kotlin')
+    platform=CACHE/'android-platform'
+    if not (platform/'android-9/android.jar').exists():
+        with zipfile.ZipFile(files['android']) as archive:
+            archive.extractall(platform)
+    files['android']=platform/'android-9/android.jar'
     for name in ['patch-classes', 'extension-classes', 'test-classes', 'patch-dex', 'extension-dex']:
-        (BUILD / name).mkdir(exist_ok=True)
+        directory=(BUILD/name).resolve()
+        if directory.parent!=BUILD:
+            raise SystemExit('Unsafe build output directory')
+        if directory.exists():
+            shutil.rmtree(directory)
+        directory.mkdir()
     run(java, '-cp', str(kotlin / 'lib/*'), 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
         '-kotlin-home', kotlin, '-Xcontext-parameters', '-Xskip-prerelease-check', '-Xlambdas=class',
         '-jvm-target', '17', '-cp', files['cli'], '-d', BUILD / 'patch-classes',
         ROOT / 'src/main/kotlin/GifCommentsPatch.kt')
-    run(java, '-jar', files['ecj'], '-8', '-encoding', 'UTF-8', '-d', BUILD / 'extension-classes',
-        ROOT / 'src/extension/java/app/revanced/gifcomments/GifComments.java')
-    testcp = os.pathsep.join(map(str, [files['protobuf'], BUILD / 'extension-classes']))
+    run(java, '-jar', files['ecj'], '-8', '-encoding', 'UTF-8', '-cp', files['android'], '-d', BUILD / 'extension-classes',
+        *sorted((ROOT / 'src/extension/java').rglob('*.java')))
+    testcp = os.pathsep.join(map(str, [files['protobuf'], files['json'], BUILD / 'extension-classes']))
     run(java, '-jar', files['ecj'], '-8', '-encoding', 'UTF-8', '-cp', testcp,
-        '-d', BUILD / 'test-classes', ROOT / 'src/test/java/GifCommentsTest.java')
+        '-d', BUILD / 'test-classes', *sorted((ROOT/'src/test/java').glob('*.java')))
     run(java, '-cp', testcp + os.pathsep + str(BUILD / 'test-classes'), 'GifCommentsTest')
+    run(java, '-cp', testcp + os.pathsep + str(BUILD / 'test-classes'), 'TenorClientTest')
+    run(java, '-cp', testcp + os.pathsep + str(BUILD / 'test-classes'), 'GifTransportTest')
     jar(BUILD / 'patch-classes', BUILD / 'patch.jar')
     jar(BUILD / 'extension-classes', BUILD / 'extension.jar')
     run(java, '-cp', files['r8'], 'com.android.tools.r8.D8', '--min-api', '28', '--classpath', files['cli'],
         '--output', BUILD / 'patch-dex', BUILD / 'patch.jar')
-    run(java, '-cp', files['r8'], 'com.android.tools.r8.D8', '--min-api', '28',
+    run(java, '-cp', files['r8'], 'com.android.tools.r8.D8', '--min-api', '28', '--lib', files['android'],
         '--output', BUILD / 'extension-dex', BUILD / 'extension.jar')
     run(sys.executable, ROOT / 'tools/package_bundle.py')
-    run(java, '-jar', files['cli'], 'list-patches', '-p', BUILD / 'gif-comments-0.1.0.rvp',
+    version=(ROOT/'VERSION').read_text().strip()
+    run(java, '-jar', files['cli'], 'list-patches', '-p', BUILD / ('gif-comments-'+version+'.rvp'),
         '-b', '--packages', '--versions')
 
 

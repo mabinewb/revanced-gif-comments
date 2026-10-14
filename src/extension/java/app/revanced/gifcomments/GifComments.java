@@ -12,6 +12,38 @@ public final class GifComments {
     private GifComments() {}
     private static final Pattern MARKER = Pattern.compile("\\[\\[gif:([1-9][0-9]{0,19})\\]\\]");
     private static final byte[] RESERVED = "[[gif".getBytes(StandardCharsets.UTF_8);
+    public static boolean hasReserved(byte[] bytes){return containsReserved(bytes);}
+
+    public static byte[] rewriteSelectedPayload(byte[] bytes,String expected,String id) {
+        Cursor cursor=new Cursor(bytes);ByteArrayOutputStream out=new ByteArrayOutputStream();
+        boolean changed=false;int count=0;
+        while(cursor.offset<bytes.length){
+            int start=cursor.offset;long tag=cursor.varint();int field=(int)(tag>>>3);int wire=(int)(tag&7);
+            byte[] value=cursor.value(wire);
+            if(field==32)return bytes;
+            if(field==3 && wire==2){
+                count++;
+                String text=new String(value,StandardCharsets.UTF_8);
+                if(text.replace("\u200B","").trim().equals(expected.replace("\u200B","").trim())) {
+                    writeString(out,3,text.replace("\u200B",""));changed=true;continue;
+                }
+            }
+            out.write(bytes,start,cursor.offset-start);
+        }
+        if(!changed || count!=1)return bytes;
+        writeString(out,32,id);return out.toByteArray();
+    }
+
+    public static Object rejectReserved(Object builder) {
+        try {
+            Object message=builder.getClass().getMethod("buildPartial").invoke(builder);
+            byte[] bytes=(byte[])message.getClass().getMethod("toByteArray").invoke(message);
+            if(containsReserved(bytes)) throw new IllegalArgumentException("GIF attachments only support new comments and replies");
+            return builder;
+        } catch(Exception failure) {
+            throw new IllegalArgumentException("Unsupported GIF comment request blocked",failure);
+        }
+    }
 
     public static Object rewrite(Object builder) {
         try {

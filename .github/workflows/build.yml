@@ -22,5 +22,5 @@ jobs:
         with:
           name: gif-comments-bundle
           path: |
-            build/gif-comments-0.1.0.rvp
+            build/gif-comments-*.rvp
             build/SHA256SUMS.txt

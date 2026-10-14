@@ -8,12 +8,13 @@ import zipfile
 
 root = Path(__file__).resolve().parents[1]
 build = Path(os.environ.get('GIF_BUILD_DIR', root / 'build')).resolve()
-out = build / 'gif-comments-0.1.0.rvp'
+version=(root/'VERSION').read_text().strip()
+out = build / ('gif-comments-'+version+'.rvp')
 manifest = '\r\n'.join([
     'Manifest-Version: 1.0',
     'Name: GIF Comments',
     'Description: Experimental Tenor comments for YouTube 20.40.45',
-    'Version: 0.1.0',
+    'Version: '+version,
     f'Timestamp: {int(time.time() * 1000)}',
     'Source: https://github.com/mabinewb/revanced-gif-comments',
     'Author: mabinewb',

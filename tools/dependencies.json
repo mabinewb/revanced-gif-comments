@@ -23,5 +23,15 @@
     "url": "https://repo.maven.apache.org/maven2/com/google/protobuf/protobuf-java/4.34.0/protobuf-java-4.34.0.jar",
     "file": "protobuf-java.jar",
     "sha256": "c834d8c9b251f401c3c776b4ac51874e5195e9f2b317a26d6e49f4096de70965"
+  },
+  "android": {
+    "url": "https://dl.google.com/android/repository/platform-28_r06.zip",
+    "file": "platform28.zip",
+    "sha256": "8452dbbf9668a428abb243c4f02a943b7aa83af3cca627629a15c4c09f28e7bd"
+  },
+  "json": {
+    "url": "https://repo.maven.apache.org/maven2/org/json/json/20250517/json-20250517.jar",
+    "file": "json.jar",
+    "sha256": "3ea61b2a06e31edf1c91134fe9106b0ebb16628be169f3db75bc7a2b06b45796"
   }
 }
