@@ -1,0 +1,8 @@
+/build/
+/tools/cache/
+*.apk
+*.apkm
+*.jks
+*.keystore
+*.log
+__pycache__/

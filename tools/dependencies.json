@@ -1,0 +1,27 @@
+{
+  "cli": {
+    "url": "https://github.com/ReVanced/revanced-cli/releases/download/v6.0.0/revanced-cli-6.0.0-all.jar",
+    "file": "revanced-cli-6.0.0-all.jar",
+    "sha256": "c25549bc17d59d2eb94fa5f86e60e9b77a02772ca88f7050f8f1276f923a9958"
+  },
+  "kotlin": {
+    "url": "https://github.com/JetBrains/kotlin/releases/download/v2.3.10/kotlin-compiler-2.3.10.zip",
+    "file": "kotlin-compiler-2.3.10.zip",
+    "sha256": "c8d546f9ff433b529fb0ad43feceb39831040cae2ca8d17e7df46364368c9a9e"
+  },
+  "ecj": {
+    "url": "https://repo.maven.apache.org/maven2/org/eclipse/jdt/ecj/3.42.0/ecj-3.42.0.jar",
+    "file": "ecj.jar",
+    "sha256": "29f6d3918ee02db4400c103bc25dd90a22491c3a395867d9393070cb96a7dd29"
+  },
+  "r8": {
+    "url": "https://dl.google.com/dl/android/maven2/com/android/tools/r8/8.13.17/r8-8.13.17.jar",
+    "file": "r8.jar",
+    "sha256": "d31fd0dc751d48740009cdd9a485126acb1d0d14c59b9f05579479940f4adf74"
+  },
+  "protobuf": {
+    "url": "https://repo.maven.apache.org/maven2/com/google/protobuf/protobuf-java/4.34.0/protobuf-java-4.34.0.jar",
+    "file": "protobuf-java.jar",
+    "sha256": "c834d8c9b251f401c3c776b4ac51874e5195e9f2b317a26d6e49f4096de70965"
+  }
+}
