@@ -15,6 +15,9 @@ public final class GifComments {
     public static boolean hasReserved(byte[] bytes){return containsReserved(bytes);}
 
     public static byte[] rewriteSelectedPayload(byte[] bytes,String expected,String id) {
+        return rewriteSelectedPayload(bytes,expected,id,false);
+    }
+    public static byte[] rewriteSelectedPayload(byte[] bytes,String expected,String id,boolean gifOnly) {
         Cursor cursor=new Cursor(bytes);ByteArrayOutputStream out=new ByteArrayOutputStream();
         boolean changed=false;int count=0;
         while(cursor.offset<bytes.length){
@@ -25,7 +28,7 @@ public final class GifComments {
                 count++;
                 String text=new String(value,StandardCharsets.UTF_8);
                 if(text.replace("\u200B","").trim().equals(expected.replace("\u200B","").trim())) {
-                    writeString(out,3,text.replace("\u200B",""));changed=true;continue;
+                    writeString(out,3,gifOnly?"":text.replace("\u200B",""));changed=true;continue;
                 }
             }
             out.write(bytes,start,cursor.offset-start);

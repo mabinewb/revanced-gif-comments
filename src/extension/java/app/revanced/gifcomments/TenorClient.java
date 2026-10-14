@@ -19,10 +19,14 @@ import org.json.JSONObject;
 public final class TenorClient {
     public static final class Gif {
         public final String id, title, preview;
-        Gif(String id, String title, String preview) { this.id=id; this.title=title; this.preview=preview; }
+        public Gif(String id, String title, String preview) { this.id=id; this.title=title; this.preview=preview; }
     }
     public static List<Gif> search(String query) throws Exception {
         String slug = query.trim().toLowerCase(Locale.ROOT);
+        if(slug.matches("[0-9]+")) {
+            if(!isId(slug))throw new IllegalArgumentException("Invalid Tenor ID");
+            return parseIdPage(new String(fetch("https://tenor.com/view/"+slug,12*1024*1024),StandardCharsets.UTF_8),slug);
+        }
         String page = "https://tenor.com/";
         if (!slug.isEmpty()) {
             StringBuilder encoded = new StringBuilder();
@@ -34,10 +38,24 @@ public final class TenorClient {
         }
         return parsePage(new String(fetch(page, 12*1024*1024), StandardCharsets.UTF_8));
     }
+    public static boolean isId(String id){return id!=null && id.matches("[1-9][0-9]{0,19}");}
+    private static JSONObject store(String html) throws Exception {
+        Matcher m=Pattern.compile("<script[^>]*id=\"store-cache\"[^>]*>([\\s\\S]*?)</script>").matcher(html);
+        if(!m.find())throw new IllegalArgumentException("Tenor page format changed");
+        return new JSONObject(m.group(1));
+    }
+    public static List<Gif> parseIdPage(String html,String id) throws Exception {
+        if(!isId(id))throw new IllegalArgumentException("Invalid Tenor ID");
+        JSONObject gifs=store(html).optJSONObject("gifs");
+        JSONObject byId=gifs==null?null:gifs.optJSONObject("byId");
+        JSONObject record=byId==null?null:byId.optJSONObject(id);
+        List<Gif> matches=parseResults(record==null?null:record.optJSONArray("results"));
+        List<Gif> exact=new ArrayList<Gif>();
+        for(Gif gif:matches)if(gif.id.equals(id))exact.add(gif);
+        return exact;
+    }
     public static List<Gif> parsePage(String html) throws Exception {
-        Matcher m = Pattern.compile("<script[^>]*id=\"store-cache\"[^>]*>([\\s\\S]*?)</script>").matcher(html);
-        if (!m.find()) throw new IllegalArgumentException("Tenor search format changed");
-        JSONObject store = new JSONObject(m.group(1));
+        JSONObject store=store(html);
         JSONObject universal = store.optJSONObject("universal");
         JSONObject searches = universal==null ? null : universal.optJSONObject("search");
         JSONArray results = null;
@@ -51,7 +69,11 @@ public final class TenorClient {
             results=featured==null?null:featured.optJSONArray("results");
         }
         if(results==null) throw new IllegalArgumentException("Tenor returned no readable results");
+        return parseResults(results);
+    }
+    private static List<Gif> parseResults(JSONArray results) throws Exception {
         List<Gif> gifs=new ArrayList<Gif>();
+        if(results==null)return gifs;
         for(int i=0;i<results.length() && gifs.size()<24;i++) {
             JSONObject r=results.optJSONObject(i);
             if(r==null)continue;
@@ -86,7 +108,7 @@ public final class TenorClient {
             HttpURLConnection connection=(HttpURLConnection)url.openConnection();
             connection.setInstanceFollowRedirects(false);
             connection.setConnectTimeout(8000);connection.setReadTimeout(8000);
-            connection.setRequestProperty("User-Agent","Mozilla/5.0 (Android) ReVancedGifComments/0.2.0");
+            connection.setRequestProperty("User-Agent","Mozilla/5.0 (Android) ReVancedGifComments/0.3.0");
             try {
                 int status=connection.getResponseCode();
                 if(status>=300 && status<400) {address=new URL(url,connection.getHeaderField("Location")).toString();continue;}

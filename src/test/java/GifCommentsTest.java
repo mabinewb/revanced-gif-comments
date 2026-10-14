@@ -74,6 +74,9 @@ public final class GifCommentsTest {
         require(field(selected,32).equals("14083772942551242087"),"Selected draft protobuf attachment");
         require(field(selected,3).equals("안녕"),"Selected draft protobuf text preserved");
         byte[] other=payload("다른 초안");require(GifComments.rewriteSelectedPayload(other,"안녕","123")==other,"Other draft protobuf unchanged");
+        byte[] gifOnly=GifComments.rewriteSelectedPayload(payload("[GIF]"),"[GIF]","123",true);
+        require(field(gifOnly,3).equals("") && field(gifOnly,32).equals("123"),"GIF-only reply removes UI placeholder in protobuf");
+        require(field(GifComments.rewriteSelectedPayload(payload("[GIF]"),"[GIF]","123",false),3).equals("[GIF]"),"User-written same text preserved without GIF-only state");
         System.out.println("Passed " + tests + " assertions");
     }
 }

@@ -75,6 +75,7 @@ def main():
     run(java, '-cp', testcp + os.pathsep + str(BUILD / 'test-classes'), 'GifCommentsTest')
     run(java, '-cp', testcp + os.pathsep + str(BUILD / 'test-classes'), 'TenorClientTest')
     run(java, '-cp', testcp + os.pathsep + str(BUILD / 'test-classes'), 'GifTransportTest')
+    run(java, '-cp', testcp + os.pathsep + str(BUILD / 'test-classes'), 'GifLibraryTest')
     jar(BUILD / 'patch-classes', BUILD / 'patch.jar')
     jar(BUILD / 'extension-classes', BUILD / 'extension.jar')
     run(java, '-cp', files['r8'], 'com.android.tools.r8.D8', '--min-api', '28', '--classpath', files['cli'],

@@ -17,7 +17,12 @@ public final class TenorClientTest {
         try{TenorClient.parsePage("changed page");throw new AssertionError("Changed page format");}catch(IllegalArgumentException expected){}
         String featured="<script id=\"store-cache\">{\"gifs\":{\"featured\":{\"results\":["+valid+"]}}}</script>";
         if(TenorClient.parsePage(featured).size()!=1)throw new AssertionError("Featured results");
-        if(args.length>0){List<TenorClient.Gif> live=TenorClient.search("happy");if(live.isEmpty())throw new AssertionError("Live search returned no GIFs");System.out.println("Live Tenor search: "+live.size()+" GIFs");}
+        String exact="<script id=\"store-cache\">{\"gifs\":{\"byId\":{\"14112463059641248604\":{\"results\":["+valid+"]}}}}</script>";
+        if(TenorClient.parseIdPage(exact,"14112463059641248604").size()!=1)throw new AssertionError("Exact numeric ID lookup");
+        if(!TenorClient.parseIdPage(exact,"123").isEmpty())throw new AssertionError("Do not fall back to unrelated GIFs");
+        if(!TenorClient.parseIdPage(exact.replace(valid,rejected),"14112463059641248604").isEmpty())throw new AssertionError("ID lookup uses rating filter");
+        for(String id:new String[]{"0","01","-1","1.2","123456789012345678901"})if(TenorClient.isId(id))throw new AssertionError("Invalid ID "+id);
+        if(args.length>0){List<TenorClient.Gif> live=TenorClient.search("happy");if(live.isEmpty())throw new AssertionError("Live search returned no GIFs");System.out.println("Live Tenor search: "+live.size()+" GIFs");List<TenorClient.Gif> direct=TenorClient.search("14083772942551242087");if(direct.size()!=1 || !direct.get(0).id.equals("14083772942551242087"))throw new AssertionError("Live ID lookup");System.out.println("Live numeric ID lookup passed");}
         System.out.println("Tenor parser and URL checks passed");
     }
 }

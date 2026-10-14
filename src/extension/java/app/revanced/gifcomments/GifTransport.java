@@ -13,12 +13,14 @@ import org.json.JSONObject;
 public final class GifTransport {
     private static volatile Pending pending;
     private static final class Pending {
-        final Object owner;final String text,id;final long deadline;
-        Pending(Object owner,String text,String id,long deadline){this.owner=owner;this.text=text;this.id=id;this.deadline=deadline;}
+        final Object owner;final String text,id;final long deadline;final boolean gifOnly;
+        Pending(Object owner,String text,String id,long deadline,boolean gifOnly){this.owner=owner;this.text=text;this.id=id;this.deadline=deadline;this.gifOnly=gifOnly;}
     }
     private static long now(){return System.nanoTime()/1000000;}
-    public static void arm(Object owner,String text,String id){pending=new Pending(owner,text,id,now()+15000);}
-    public static void armDraft(Object owner,String text,String id){pending=new Pending(owner,text,id,Long.MAX_VALUE);}
+    public static void arm(Object owner,String text,String id){arm(owner,text,id,false);}
+    public static void arm(Object owner,String text,String id,boolean gifOnly){pending=new Pending(owner,text,id,now()+15000,gifOnly);}
+    public static void armDraft(Object owner,String text,String id){armDraft(owner,text,id,false);}
+    public static void armDraft(Object owner,String text,String id,boolean gifOnly){pending=new Pending(owner,text,id,Long.MAX_VALUE,gifOnly);}
     public static void cancelAll(){pending=null;}
     public static boolean outstanding(Object owner){Pending p=pending;return p!=null && p.owner==owner;}
     public static void cancel(Object owner){if(outstanding(owner))pending=null;}
@@ -47,10 +49,10 @@ public final class GifTransport {
                 JSONObject object=new JSONObject(json);
                 String text=object.optString("commentText",null);
                 if(text!=null && text.replace("\u200B","").trim().equals(p.text.replace("\u200B","").trim())) {
-                    String clean=text.replace("\u200B","");if(clean.isEmpty())object.remove("commentText");else object.put("commentText",clean);object.put("tenorId",p.id);
+                    String clean=p.gifOnly?"":text.replace("\u200B","");if(clean.isEmpty())object.remove("commentText");else object.put("commentText",clean);object.put("tenorId",p.id);
                     updated=object.toString().getBytes(StandardCharsets.UTF_8);
                 }
-            } else updated=GifComments.rewriteSelectedPayload(raw,p.text,p.id);
+            } else updated=GifComments.rewriteSelectedPayload(raw,p.text,p.id,p.gifOnly);
             if(updated==raw)return body;
             if(pending==p)pending=null;
             if(compressed){ByteArrayOutputStream output=new ByteArrayOutputStream();try(GZIPOutputStream gzip=new GZIPOutputStream(output)){gzip.write(updated);}updated=output.toByteArray();}

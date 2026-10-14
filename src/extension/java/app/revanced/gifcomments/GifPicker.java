@@ -104,7 +104,7 @@ public final class GifPicker {
                 State state=new State(editor);
                 STATES.put(editor,new WeakReference<State>(state));
                 state.position();
-                Log.i("ReVancedGIF","0.2.1 comment editor attached: "+editor.getClass().getName());
+                Log.i("ReVancedGIF","0.3.0 comment editor attached: "+editor.getClass().getName());
             }catch(RuntimeException failure){Log.w("ReVancedGIF","Cannot attach GIF button",failure);}
         });
     }
@@ -118,7 +118,8 @@ public final class GifPicker {
         final PopupWindow buttonWindow,previewWindow;
         final Button button;
         int selectionGeneration;
-        boolean changing,picking;
+        private static final String GIF_ONLY="[GIF]";
+        boolean changing,picking,gifOnly;
         String selectedId;
         State(EditText e) {
             editor=e;Context c=e.getContext();
@@ -142,9 +143,10 @@ public final class GifPicker {
                 public void onTextChanged(CharSequence s,int start,int before,int count){}
                 public void afterTextChanged(Editable text){
                     if(changing)return;
+                    if(gifOnly && !text.toString().equals(GIF_ONLY))gifOnly=false;
                     if(selectedId!=null) {
                         if(text.length()==0){selectedId=null;preview.setVisibility(View.GONE);selectionGeneration++;GifTransport.cancel(State.this);}
-                        else GifTransport.armDraft(State.this,text.toString(),selectedId);
+                        else GifTransport.armDraft(State.this,text.toString(),selectedId,gifOnly);
                     }
                 }
             });
@@ -152,7 +154,7 @@ public final class GifPicker {
             View send=e.getRootView().findViewById(0x7f0b1238);
             if(send!=null)send.setOnTouchListener((v,event) -> {
                 if(event.getAction()==MotionEvent.ACTION_UP && selectedId!=null && event.getX()>=0 && event.getY()>=0 && event.getX()<v.getWidth() && event.getY()<v.getHeight()) {
-                    GifTransport.arm(State.this,editor.getText().toString(),selectedId);
+                    GifTransport.arm(State.this,editor.getText().toString(),selectedId,gifOnly);
                     MAIN.postDelayed(() -> {if(GifTransport.outstanding(State.this)){GifTransport.cancel(State.this);Toast.makeText(editor.getContext(),"GIF 첨부 요청을 처리하지 못했습니다. 게시된 댓글을 확인하세요.",Toast.LENGTH_LONG).show();}},10000);
                 }
                 return false;
@@ -173,10 +175,10 @@ public final class GifPicker {
                 }else previewWindow.dismiss();
             }catch(RuntimeException failure){Log.w("ReVancedGIF","Cannot position GIF button",failure);}
         }
-        void clear(){changing=true;try{if(editor.getText().toString().equals("\u200B"))editor.setText("");selectedId=null;GifTransport.cancel(this);preview.setVisibility(View.GONE);previewWindow.dismiss();selectionGeneration++;}finally{changing=false;}}
+        void clear(){changing=true;try{if((gifOnly && editor.getText().toString().equals(GIF_ONLY)) || editor.getText().toString().equals("\u200B"))editor.setText("");gifOnly=false;selectedId=null;GifTransport.cancel(this);preview.setVisibility(View.GONE);previewWindow.dismiss();selectionGeneration++;}finally{changing=false;}}
         void choose(final TenorClient.Gif gif){
             clear();changing=true;
-            try{selectedId=gif.id;if(editor.length()==0)editor.setText("\u200B");GifTransport.armDraft(this,editor.getText().toString(),gif.id);}finally{changing=false;}
+            try{selectedId=gif.id;if(editor.length()==0){gifOnly=true;editor.setText(GIF_ONLY);editor.selectAll();}GifTransport.armDraft(this,editor.getText().toString(),gif.id,gifOnly);}finally{changing=false;}
             previewText.setText("GIF 선택됨");previewImage.setMovie(null);preview.setVisibility(View.VISIBLE);position();
             final int generation=++selectionGeneration;
             NETWORK.execute(() -> {try{byte[] bytes=TenorClient.fetch(gif.preview,4*1024*1024);final Movie movie=Movie.decodeByteArray(bytes,0,bytes.length);MAIN.post(() -> {if(generation==selectionGeneration && preview.isAttachedToWindow())previewImage.setMovie(movie);});}catch(Exception ignored){MAIN.post(() -> {if(generation==selectionGeneration)previewText.setText("GIF 선택됨 · 미리보기 로드 실패");});}});
@@ -186,11 +188,16 @@ public final class GifPicker {
             Context c=editor.getContext();final Dialog dialog=new Dialog(c);dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
             LinearLayout body=column(c);body.setPadding(dp(c,16),dp(c,12),dp(c,16),dp(c,12));
             TextView title=new TextView(c);title.setText("Tenor GIF 검색");title.setTextSize(18);body.addView(title);
-            final EditText search=new EditText(c);search.setSingleLine(true);search.setHint("검색어 입력");body.addView(search);
+            final EditText search=new EditText(c);search.setSingleLine(true);search.setHint("검색어 또는 Tenor 숫자 ID");body.addView(search);
+            LinearLayout tabs=new LinearLayout(c);body.addView(tabs);
             final TextView status=new TextView(c);body.addView(status);
             ScrollView scroll=new ScrollView(c);final LinearLayout results=column(c);scroll.addView(results);body.addView(scroll,new LinearLayout.LayoutParams(-1,dp(c,320)));
             Button close=new Button(c);close.setText("닫기");body.addView(close);close.setOnClickListener(v -> dialog.dismiss());
             final Session session=new Session(dialog,results,status,this);
+            String[] names={"검색","최근 사용","즐겨찾기"};
+            for(int i=0;i<names.length;i++){final int tab=i;Button tabButton=new Button(c);tabButton.setText(names[i]);tabs.addView(tabButton,new LinearLayout.LayoutParams(0,-2,1));tabButton.setOnClickListener(v -> {search.setVisibility(tab==0?View.VISIBLE:View.GONE);session.selectTab(tab,search.getText().toString());});}
+            Button clearHistory=new Button(c);clearHistory.setText("최근 기록 지우기");clearHistory.setVisibility(View.GONE);body.addView(clearHistory);session.clearHistory=clearHistory;
+            clearHistory.setOnClickListener(v -> {session.store.library.clearRecent();session.store.save();session.selectTab(1,"");});
             dialog.setOnDismissListener(d -> {session.active=false;session.generation++;if(session.pending!=null)MAIN.removeCallbacks(session.pending);picking=false;position();});
             search.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){}public void afterTextChanged(Editable t){session.schedule(t.toString());}});
             dialog.setContentView(body);dialog.show();Window window=dialog.getWindow();if(window!=null){window.setLayout(-1,-2);window.setGravity(Gravity.BOTTOM);}
@@ -199,20 +206,38 @@ public final class GifPicker {
     }
     private static final class Session {
         final Dialog dialog;final LinearLayout results;final TextView status;final State state;
+        final GifStore store;
+        int tab;Button clearHistory;
         volatile boolean active=true;volatile int generation;Runnable pending;
-        Session(Dialog d,LinearLayout r,TextView s,State owner){dialog=d;results=r;status=s;state=owner;}
-        void schedule(final String query){if(pending!=null)MAIN.removeCallbacks(pending);final int current=++generation;pending=() -> {status.setText("검색 중…");results.removeAllViews();NETWORK.execute(() -> {try{List<TenorClient.Gif> gifs=TenorClient.search(query);MAIN.post(() -> {if(active && current==generation)show(gifs,current);});}catch(Exception failure){MAIN.post(() -> {if(active && current==generation)status.setText("검색 실패 · 검색어를 바꿔 다시 시도하세요");});}});};MAIN.postDelayed(pending,400);}
+        Session(Dialog d,LinearLayout r,TextView s,State owner){dialog=d;results=r;status=s;state=owner;store=new GifStore(owner.editor.getContext());}
+        void selectTab(int next,String query){
+            tab=next;if(pending!=null)MAIN.removeCallbacks(pending);int current=++generation;
+            clearHistory.setVisibility(next==1?View.VISIBLE:View.GONE);
+            if(next==0)schedule(query);else show(next==1?store.library.recent():store.library.favorites(),current);
+        }
+        void schedule(final String query){
+            if(tab!=0)return;if(pending!=null)MAIN.removeCallbacks(pending);final int current=++generation;
+            final boolean numeric=query.trim().matches("[0-9]+");
+            pending=() -> {status.setText(numeric?"ID 조회 중…":"검색 중…");results.removeAllViews();NETWORK.execute(() -> {
+                try{List<TenorClient.Gif> gifs=TenorClient.search(query);MAIN.post(() -> {if(active && current==generation)show(gifs,current);});}
+                catch(Exception failure){MAIN.post(() -> {if(active && current==generation)status.setText(numeric?"ID 조회 실패 · Tenor 숫자 ID를 확인하세요":"검색 실패 · 검색어를 바꿔 다시 시도하세요");});}
+            });};MAIN.postDelayed(pending,400);
+        }
         void show(List<TenorClient.Gif> gifs,int current){
-            status.setText(gifs.isEmpty()?"검색 결과 없음":"GIF를 선택하세요 · 일부 GIF는 YouTube에서 거절될 수 있습니다");
+            results.removeAllViews();
+            status.setText(gifs.isEmpty()?(tab==1?"최근 선택한 GIF 없음":tab==2?"즐겨찾기 없음 · GIF 카드의 ☆ 버튼으로 추가하세요":"검색 결과 없음"):tab==1?"최근 선택한 GIF · 눌러서 재사용":tab==2?"즐겨찾기 · 눌러서 재사용":"GIF를 선택하세요 · ☆ 버튼으로 즐겨찾기");
             LinearLayout row=null;Context c=results.getContext();
             for(int i=0;i<gifs.size();i++) {
                 final TenorClient.Gif gif=gifs.get(i);
                 if(i%2==0){row=new LinearLayout(c);results.addView(row);}
                 LinearLayout card=column(c);card.setPadding(dp(c,4),dp(c,4),dp(c,4),dp(c,4));
                 final Animated image=new Animated(c);image.setContentDescription(gif.title);card.addView(image,new LinearLayout.LayoutParams(-1,dp(c,112)));
-                TextView caption=new TextView(c);caption.setText(gif.title);caption.setMaxLines(2);card.addView(caption);
-                row.addView(card,new LinearLayout.LayoutParams(0,dp(c,158),1));
-                card.setOnClickListener(v -> {if(editorReady()){state.choose(gif);dialog.dismiss();}});
+                TextView caption=new TextView(c);caption.setText(gif.title);caption.setMaxLines(1);card.addView(caption);
+                TextView id=new TextView(c);id.setText(gif.id);id.setTextSize(10);id.setTextIsSelectable(true);card.addView(id);
+                final Button favorite=new Button(c);favorite.setText(store.library.isFavorite(gif.id)?"★ 해제":"☆ 저장");favorite.setContentDescription("GIF 즐겨찾기 추가 또는 해제");card.addView(favorite,new LinearLayout.LayoutParams(-1,dp(c,40)));
+                favorite.setOnClickListener(v -> {store.library.toggleFavorite(gif);store.save();favorite.setText(store.library.isFavorite(gif.id)?"★ 해제":"☆ 저장");if(tab==2)selectTab(2,"");});
+                row.addView(card,new LinearLayout.LayoutParams(0,dp(c,206),1));
+                card.setOnClickListener(v -> {if(editorReady()){store.library.remember(gif);store.save();state.choose(gif);dialog.dismiss();}});
                 NETWORK.execute(() -> {if(!active || current!=generation)return;try{byte[] bytes=TenorClient.fetch(gif.preview,4*1024*1024);final Movie movie=Movie.decodeByteArray(bytes,0,bytes.length);MAIN.post(() -> {if(active && current==generation)image.setMovie(movie);});}catch(Exception ignored){}});
             }
         }

@@ -1,7 +1,7 @@
 {
-  "download_url": "https://github.com/mabinewb/revanced-gif-comments/releases/download/v0.2.1/gif-comments-0.2.1.rvp",
-  "created_at": "2026-10-14T06:31:41",
+  "download_url": "https://github.com/mabinewb/revanced-gif-comments/releases/download/v0.3.0/gif-comments-0.3.0.rvp",
+  "created_at": "2026-10-14T07:00:27",
   "signature_download_url": null,
-  "description": "Experimental comment editor discovery and GIF button fix for full-screen and bottom dialogs; device UI and posting remain unverified.",
-  "version": "0.2.1"
+  "description": "Tenor numeric ID lookup, local recents and favorites, GIF-only reply improvement. Base 0.2.1 posting user-confirmed; new features await device testing.",
+  "version": "0.3.0"
 }
