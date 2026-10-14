@@ -33,5 +33,10 @@
     "url": "https://repo.maven.apache.org/maven2/org/json/json/20250517/json-20250517.jar",
     "file": "json.jar",
     "sha256": "3ea61b2a06e31edf1c91134fe9106b0ebb16628be169f3db75bc7a2b06b45796"
+  },
+  "morphe-cli": {
+    "url": "https://github.com/MorpheApp/morphe-desktop/releases/download/v1.18.1/morphe-desktop-1.18.1-all.jar",
+    "file": "morphe-desktop-1.18.1-all.jar",
+    "sha256": "1b506ab5f03d16a2f65026d5e0e1910d01fc1e2152f21eaeb44ed2f30856597b"
   }
 }

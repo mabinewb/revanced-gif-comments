@@ -1,7 +1,7 @@
 {
-  "download_url": "https://github.com/mabinewb/revanced-gif-comments/releases/download/v0.3.1/gif-comments-0.3.1.rvp",
-  "created_at": "2026-10-14T07:19:04",
+  "download_url": "https://github.com/mabinewb/revanced-gif-comments/releases/download/v0.4.0/gif-comments-0.4.0.rvp",
+  "created_at": "2026-10-14T07:43:40",
   "signature_download_url": null,
-  "description": "Show GIF only on active comment editors; native-style icon beside timestamp where supported. Keeps ID lookup, local recents and favorites.",
-  "version": "0.3.1"
+  "description": "ReVanced GIF comments for YouTube 20.40.45. Morphe uses the separate morphe-patches-bundle.json source.",
+  "version": "0.4.0"
 }

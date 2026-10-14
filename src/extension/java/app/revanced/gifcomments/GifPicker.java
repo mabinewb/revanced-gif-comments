@@ -125,9 +125,19 @@ public final class GifPicker {
                 State state=new State(editor);
                 STATES.put(editor,new WeakReference<State>(state));
                 state.position();
-                Log.i("ReVancedGIF","0.3.1 comment editor attached: "+editor.getClass().getName());
+                Log.i("ReVancedGIF","0.4.0 comment editor attached: "+editor.getClass().getName());
             }catch(RuntimeException failure){Log.w("ReVancedGIF","Cannot attach GIF button",failure);}
         },180);
+    }
+    private static View namedView(View root,String name){
+        int id=root.getResources().getIdentifier(name,"id","com.google.android.youtube");
+        if(id!=0){View found=root.findViewById(id);if(found!=null)return found;}
+        return scanNamed(root,name);
+    }
+    private static View scanNamed(View view,String name){
+        if(view.getId()!=View.NO_ID)try{if(name.equals(view.getResources().getResourceEntryName(view.getId())))return view;}catch(RuntimeException ignored){}
+        if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++){View found=scanNamed(group.getChildAt(i),name);if(found!=null)return found;}}
+        return null;
     }
     private static int dp(Context c,int n){return (int)(c.getResources().getDisplayMetrics().density*n+.5f);}
     private static LinearLayout column(Context c){LinearLayout v=new LinearLayout(c);v.setOrientation(LinearLayout.VERTICAL);return v;}
@@ -147,7 +157,7 @@ public final class GifPicker {
             editor=e;Context c=e.getContext();
             GifTransport.cancelAll();
             button=new GifIcon(e);button.setContentDescription("Tenor GIF 검색");button.setFocusable(false);
-            View timestamp=e.getRootView().findViewById(0x7f0b1579);
+            View timestamp=namedView(e.getRootView(),"timestamp_button");
             LinearLayout row=timestamp!=null && timestamp.getParent() instanceof LinearLayout?(LinearLayout)timestamp.getParent():null;
             boolean sharesRow=false;
             for(View node=e;node!=null;node=node.getParent() instanceof View?(View)node.getParent():null)if(node==row){sharesRow=true;break;}
@@ -183,7 +193,7 @@ public final class GifPicker {
                 }
             });
             e.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener(){public void onViewAttachedToWindow(View v){}public void onViewDetachedFromWindow(View v){GifTransport.cancel(State.this);selectedId=null;selectionGeneration++;hideButton();previewWindow.dismiss();}});
-            View send=e.getRootView().findViewById(0x7f0b1238);
+            View send=namedView(e.getRootView(),"send_button");
             if(send!=null)send.setOnTouchListener((v,event) -> {
                 if(event.getAction()==MotionEvent.ACTION_UP && selectedId!=null && event.getX()>=0 && event.getY()>=0 && event.getX()<v.getWidth() && event.getY()<v.getHeight()) {
                     GifTransport.arm(State.this,editor.getText().toString(),selectedId,gifOnly);

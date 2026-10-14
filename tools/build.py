@@ -12,6 +12,7 @@ import sys
 import urllib.request
 import zipfile
 
+PLATFORM='morphe' if '--morphe' in sys.argv else 'revanced'
 ROOT = Path(__file__).resolve().parents[1]
 CACHE = Path(os.environ.get('GIF_CACHE_DIR', ROOT / 'tools/cache')).resolve()
 BUILD = Path(os.environ.get('GIF_BUILD_DIR', ROOT / 'build')).resolve()
@@ -38,6 +39,7 @@ def main():
     dependencies = json.loads((ROOT / 'tools/dependencies.json').read_text(encoding='utf-8'))
     files = {}
     for name, dependency in dependencies.items():
+        if name=='morphe-cli' and PLATFORM!='morphe': continue
         path = CACHE / dependency['file']
         if not path.exists():
             print('Downloading:', name, flush=True)
@@ -47,6 +49,7 @@ def main():
         if hashlib.sha256(path.read_bytes()).hexdigest() != dependency['sha256']:
             raise SystemExit(f'Hash mismatch: {path.name}. Remove the failed download and retry.')
         files[name] = path
+    if PLATFORM=='morphe': files['cli']=files['morphe-cli']
     kotlin = CACHE / 'kotlin/kotlinc'
     if not (kotlin / 'lib/kotlin-compiler.jar').exists():
         with zipfile.ZipFile(files['kotlin']) as archive:
@@ -66,7 +69,7 @@ def main():
     run(java, '-cp', str(kotlin / 'lib/*'), 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
         '-kotlin-home', kotlin, '-Xcontext-parameters', '-Xskip-prerelease-check', '-Xlambdas=class',
         '-jvm-target', '17', '-cp', files['cli'], '-d', BUILD / 'patch-classes',
-        ROOT / 'src/main/kotlin/GifCommentsPatch.kt')
+        ROOT / ('src/main/kotlin/MorpheGifCommentsPatch.kt' if PLATFORM=='morphe' else 'src/main/kotlin/GifCommentsPatch.kt'))
     run(java, '-jar', files['ecj'], '-8', '-encoding', 'UTF-8', '-cp', files['android'], '-d', BUILD / 'extension-classes',
         *sorted((ROOT / 'src/extension/java').rglob('*.java')))
     testcp = os.pathsep.join(map(str, [files['protobuf'], files['json'], BUILD / 'extension-classes']))
@@ -82,10 +85,13 @@ def main():
         '--output', BUILD / 'patch-dex', BUILD / 'patch.jar')
     run(java, '-cp', files['r8'], 'com.android.tools.r8.D8', '--min-api', '28', '--lib', files['android'],
         '--output', BUILD / 'extension-dex', BUILD / 'extension.jar')
-    run(sys.executable, ROOT / 'tools/package_bundle.py')
+    run(sys.executable, ROOT / 'tools/package_bundle.py', *(['--morphe'] if PLATFORM=='morphe' else []))
     version=(ROOT/'VERSION').read_text().strip()
-    run(java, '-jar', files['cli'], 'list-patches', '-p', BUILD / ('gif-comments-'+version+'.rvp'),
-        '-b', '--packages', '--versions')
+    if PLATFORM=='morphe':
+        run(java,'-jar',files['cli'],'list-patches','--patches',BUILD/('morphe-gif-comments-'+version+'.mpp'),'-p','-v')
+    else:
+        run(java, '-jar', files['cli'], 'list-patches', '-p', BUILD / ('gif-comments-'+version+'.rvp'), '-b', '--packages', '--versions')
+
 
 
 if __name__ == '__main__':

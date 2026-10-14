@@ -1,4 +1,4 @@
-name: Build patch bundle
+name: Build ReVanced and Morphe bundles
 on:
   push:
     branches: [main]
@@ -8,6 +8,11 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform: [revanced, morphe]
+    env:
+      GIF_BUILD_DIR: build/${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -17,10 +22,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python tools/build.py
+      - run: python tools/build.py ${{ matrix.platform == 'morphe' && '--morphe' || '' }}
       - uses: actions/upload-artifact@v4
         with:
-          name: gif-comments-bundle
+          name: gif-comments-${{ matrix.platform }}
           path: |
-            build/gif-comments-*.rvp
-            build/SHA256SUMS.txt
+            build/${{ matrix.platform }}/*.rvp
+            build/${{ matrix.platform }}/*.mpp
+            build/${{ matrix.platform }}/SHA256SUMS.txt
