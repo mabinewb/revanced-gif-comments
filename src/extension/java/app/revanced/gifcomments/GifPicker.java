@@ -5,6 +5,12 @@ import android.app.Activity;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Movie;
+import android.graphics.Paint;
+import android.graphics.RectF;
+import android.graphics.Typeface;
+import android.content.res.ColorStateList;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -39,6 +45,7 @@ public final class GifPicker {
     private static final WeakHashMap<EditText,WeakReference<State>> STATES=new WeakHashMap<EditText,WeakReference<State>>();
     private GifPicker(){}
     private static final WeakHashMap<EditText,Boolean> OBSERVED=new WeakHashMap<EditText,Boolean>();
+    private static final WeakHashMap<EditText,Boolean> SCHEDULED=new WeakHashMap<EditText,Boolean>();
     private static final WeakHashMap<View,Boolean> ROOTS=new WeakHashMap<View,Boolean>();
     public static void watchActivity(Activity activity){watchRoot(activity.getWindow().getDecorView());}
     public static void watchDialog(Dialog dialog){if(dialog.getWindow()!=null)watchRoot(dialog.getWindow().getDecorView());}
@@ -46,6 +53,7 @@ public final class GifPicker {
         if(ROOTS.put(root,Boolean.TRUE)!=null)return;
         root.post(() -> scan(root));
         final ViewTreeObserver.OnGlobalFocusChangeListener focus=(oldView,newView) -> {
+            if(oldView instanceof EditText){WeakReference<State> old=STATES.get(oldView);if(old!=null && old.get()!=null)old.get().position();}
             observe(newView);
             if(newView instanceof EditText && isCommentEditor((EditText)newView))install(newView);
         };
@@ -73,11 +81,19 @@ public final class GifPicker {
             WeakReference<State> ref=STATES.get(editor);
             if(ref!=null && ref.get()!=null)ref.get().position();
         };
+        final ViewTreeObserver.OnGlobalFocusChangeListener focus=(oldView,newView) -> {if(oldView==editor || newView==editor)listener.onGlobalLayout();};
+        final ViewTreeObserver.OnWindowFocusChangeListener windowFocus=focused -> listener.onGlobalLayout();
         editor.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener(){
-            public void onViewAttachedToWindow(View v){editor.getViewTreeObserver().addOnGlobalLayoutListener(listener);editor.post(() -> listener.onGlobalLayout());}
-            public void onViewDetachedFromWindow(View v){if(editor.getViewTreeObserver().isAlive())editor.getViewTreeObserver().removeOnGlobalLayoutListener(listener);}
+            public void onViewAttachedToWindow(View v){
+                editor.getViewTreeObserver().addOnGlobalLayoutListener(listener);editor.getViewTreeObserver().addOnGlobalFocusChangeListener(focus);editor.getViewTreeObserver().addOnWindowFocusChangeListener(windowFocus);editor.post(() -> listener.onGlobalLayout());
+            }
+            public void onViewDetachedFromWindow(View v){if(editor.getViewTreeObserver().isAlive()){
+                editor.getViewTreeObserver().removeOnGlobalLayoutListener(listener);editor.getViewTreeObserver().removeOnGlobalFocusChangeListener(focus);editor.getViewTreeObserver().removeOnWindowFocusChangeListener(windowFocus);
+            }}
         });
-        if(editor.isAttachedToWindow()){editor.getViewTreeObserver().addOnGlobalLayoutListener(listener);editor.post(() -> listener.onGlobalLayout());}
+        if(editor.isAttachedToWindow()){
+            editor.getViewTreeObserver().addOnGlobalLayoutListener(listener);editor.getViewTreeObserver().addOnGlobalFocusChangeListener(focus);editor.getViewTreeObserver().addOnWindowFocusChangeListener(windowFocus);editor.post(() -> listener.onGlobalLayout());
+        }
     }
     private static boolean isCommentEditor(EditText editor) {
         if(!editor.isAttachedToWindow() || !editor.isShown())return false;
@@ -92,21 +108,26 @@ public final class GifPicker {
         String hint=editor.getHint()==null?"":editor.getHint().toString().toLowerCase(java.util.Locale.ROOT);
         return hint.contains("댓글") || hint.contains("답글") || hint.contains("comment") || hint.contains("reply");
     }
+    private static boolean activeEditor(EditText editor){
+        return editor.isAttachedToWindow() && editor.isShown() && editor.isEnabled() && editor.isFocusable() && editor.hasFocus() && editor.hasWindowFocus() && editor.getInputType()!=0;
+    }
     public static void install(View view) {
         if(!(view instanceof EditText))return;
         final EditText editor=(EditText)view;
         observe(editor);
-        editor.post(() -> {
-            if(!editor.isAttachedToWindow() || !editor.isShown())return;
+        if(!activeEditor(editor) || SCHEDULED.put(editor,Boolean.TRUE)!=null)return;
+        editor.postDelayed(() -> {
+            SCHEDULED.remove(editor);
+            if(!activeEditor(editor))return;
             WeakReference<State> ref=STATES.get(editor);
             if(ref!=null && ref.get()!=null){ref.get().position();return;}
             try {
                 State state=new State(editor);
                 STATES.put(editor,new WeakReference<State>(state));
                 state.position();
-                Log.i("ReVancedGIF","0.3.0 comment editor attached: "+editor.getClass().getName());
+                Log.i("ReVancedGIF","0.3.1 comment editor attached: "+editor.getClass().getName());
             }catch(RuntimeException failure){Log.w("ReVancedGIF","Cannot attach GIF button",failure);}
-        });
+        },180);
     }
     private static int dp(Context c,int n){return (int)(c.getResources().getDisplayMetrics().density*n+.5f);}
     private static LinearLayout column(Context c){LinearLayout v=new LinearLayout(c);v.setOrientation(LinearLayout.VERTICAL);return v;}
@@ -116,7 +137,8 @@ public final class GifPicker {
         final Animated previewImage;
         final TextView previewText;
         final PopupWindow buttonWindow,previewWindow;
-        final Button button;
+        final GifIcon button;
+        final boolean inlineButton;
         int selectionGeneration;
         private static final String GIF_ONLY="[GIF]";
         boolean changing,picking,gifOnly;
@@ -124,11 +146,21 @@ public final class GifPicker {
         State(EditText e) {
             editor=e;Context c=e.getContext();
             GifTransport.cancelAll();
-            button=new Button(c);button.setText("GIF");button.setContentDescription("Tenor GIF 검색");button.setMinWidth(0);button.setMinimumWidth(0);button.setPadding(0,0,0,0);
-            buttonWindow=new PopupWindow(button,dp(c,48),dp(c,48),false);
-            buttonWindow.setBackgroundDrawable(new ColorDrawable(android.graphics.Color.TRANSPARENT));
-            buttonWindow.setClippingEnabled(true);
-            editor.setPadding(editor.getPaddingLeft(),editor.getPaddingTop(),editor.getPaddingRight()+dp(c,48),editor.getPaddingBottom());
+            button=new GifIcon(e);button.setContentDescription("Tenor GIF 검색");button.setFocusable(false);
+            View timestamp=e.getRootView().findViewById(0x7f0b1579);
+            LinearLayout row=timestamp!=null && timestamp.getParent() instanceof LinearLayout?(LinearLayout)timestamp.getParent():null;
+            boolean sharesRow=false;
+            for(View node=e;node!=null;node=node.getParent() instanceof View?(View)node.getParent():null)if(node==row){sharesRow=true;break;}
+            inlineButton=sharesRow && row.getOrientation()==LinearLayout.HORIZONTAL;
+            if(inlineButton){
+                buttonWindow=null;button.setVisibility(View.GONE);
+                row.addView(button,row.indexOfChild(timestamp),new LinearLayout.LayoutParams(dp(c,40),dp(c,40)));
+            }else{
+                buttonWindow=new PopupWindow(button,dp(c,40),dp(c,40),false);
+                buttonWindow.setBackgroundDrawable(new ColorDrawable(android.graphics.Color.TRANSPARENT));
+                buttonWindow.setClippingEnabled(true);
+                editor.setPadding(editor.getPaddingLeft(),editor.getPaddingTop(),editor.getPaddingRight()+dp(c,40),editor.getPaddingBottom());
+            }
             button.setOnClickListener(v -> open());
             preview=new LinearLayout(c);preview.setGravity(Gravity.CENTER_VERTICAL);preview.setVisibility(View.GONE);
             previewImage=new Animated(c);preview.addView(previewImage,new LinearLayout.LayoutParams(dp(c,96),dp(c,72)));
@@ -150,7 +182,7 @@ public final class GifPicker {
                     }
                 }
             });
-            e.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener(){public void onViewAttachedToWindow(View v){}public void onViewDetachedFromWindow(View v){GifTransport.cancel(State.this);selectedId=null;selectionGeneration++;buttonWindow.dismiss();previewWindow.dismiss();}});
+            e.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener(){public void onViewAttachedToWindow(View v){}public void onViewDetachedFromWindow(View v){GifTransport.cancel(State.this);selectedId=null;selectionGeneration++;hideButton();previewWindow.dismiss();}});
             View send=e.getRootView().findViewById(0x7f0b1238);
             if(send!=null)send.setOnTouchListener((v,event) -> {
                 if(event.getAction()==MotionEvent.ACTION_UP && selectedId!=null && event.getX()>=0 && event.getY()>=0 && event.getX()<v.getWidth() && event.getY()<v.getHeight()) {
@@ -160,13 +192,15 @@ public final class GifPicker {
                 return false;
             });
         }
+        void hideButton(){if(inlineButton)button.setVisibility(View.GONE);else buttonWindow.dismiss();}
         void position(){
             Rect visible=new Rect();
-            if(picking || !editor.isAttachedToWindow() || !editor.isShown() || !editor.getGlobalVisibleRect(visible) || visible.height()<dp(editor.getContext(),24)) {buttonWindow.dismiss();previewWindow.dismiss();return;}
+            if(picking || !activeEditor(editor) || !editor.getGlobalVisibleRect(visible) || visible.height()<dp(editor.getContext(),24)) {hideButton();previewWindow.dismiss();return;}
             int[] xy=new int[2];editor.getLocationOnScreen(xy);
-            int x=xy[0]+editor.getWidth()-dp(editor.getContext(),48),y=xy[1]+Math.max(0,(editor.getHeight()-dp(editor.getContext(),48))/2);
+            int x=xy[0]+editor.getWidth()-dp(editor.getContext(),40),y=xy[1]+Math.max(0,(editor.getHeight()-dp(editor.getContext(),40))/2);
             try {
-                if(buttonWindow.isShowing())buttonWindow.update(x,y,-1,-1);
+                if(inlineButton)button.setVisibility(View.VISIBLE);
+                else if(buttonWindow.isShowing())buttonWindow.update(x,y,-1,-1);
                 else buttonWindow.showAtLocation(editor,Gravity.TOP|Gravity.LEFT,x,y);
                 if(selectedId!=null) {
                     int px=xy[0],py=Math.max(0,xy[1]-dp(editor.getContext(),80));
@@ -184,7 +218,8 @@ public final class GifPicker {
             NETWORK.execute(() -> {try{byte[] bytes=TenorClient.fetch(gif.preview,4*1024*1024);final Movie movie=Movie.decodeByteArray(bytes,0,bytes.length);MAIN.post(() -> {if(generation==selectionGeneration && preview.isAttachedToWindow())previewImage.setMovie(movie);});}catch(Exception ignored){MAIN.post(() -> {if(generation==selectionGeneration)previewText.setText("GIF 선택됨 · 미리보기 로드 실패");});}});
         }
         void open(){
-            picking=true;buttonWindow.dismiss();previewWindow.dismiss();
+            if(!activeEditor(editor))return;
+            picking=true;hideButton();previewWindow.dismiss();
             Context c=editor.getContext();final Dialog dialog=new Dialog(c);dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
             LinearLayout body=column(c);body.setPadding(dp(c,16),dp(c,12),dp(c,16),dp(c,12));
             TextView title=new TextView(c);title.setText("Tenor GIF 검색");title.setTextSize(18);body.addView(title);
@@ -198,7 +233,7 @@ public final class GifPicker {
             for(int i=0;i<names.length;i++){final int tab=i;Button tabButton=new Button(c);tabButton.setText(names[i]);tabs.addView(tabButton,new LinearLayout.LayoutParams(0,-2,1));tabButton.setOnClickListener(v -> {search.setVisibility(tab==0?View.VISIBLE:View.GONE);session.selectTab(tab,search.getText().toString());});}
             Button clearHistory=new Button(c);clearHistory.setText("최근 기록 지우기");clearHistory.setVisibility(View.GONE);body.addView(clearHistory);session.clearHistory=clearHistory;
             clearHistory.setOnClickListener(v -> {session.store.library.clearRecent();session.store.save();session.selectTab(1,"");});
-            dialog.setOnDismissListener(d -> {session.active=false;session.generation++;if(session.pending!=null)MAIN.removeCallbacks(session.pending);picking=false;position();});
+            dialog.setOnDismissListener(d -> {session.active=false;session.generation++;if(session.pending!=null)MAIN.removeCallbacks(session.pending);picking=false;MAIN.postDelayed(() -> position(),180);});
             search.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){}public void afterTextChanged(Editable t){session.schedule(t.toString());}});
             dialog.setContentView(body);dialog.show();Window window=dialog.getWindow();if(window!=null){window.setLayout(-1,-2);window.setGravity(Gravity.BOTTOM);}
             session.schedule("");
@@ -241,7 +276,24 @@ public final class GifPicker {
                 NETWORK.execute(() -> {if(!active || current!=generation)return;try{byte[] bytes=TenorClient.fetch(gif.preview,4*1024*1024);final Movie movie=Movie.decodeByteArray(bytes,0,bytes.length);MAIN.post(() -> {if(active && current==generation)image.setMovie(movie);});}catch(Exception ignored){}});
             }
         }
-        boolean editorReady(){if(state.editor.isAttachedToWindow())return true;dialog.dismiss();return false;}
+        boolean editorReady(){if(state.editor.isAttachedToWindow() && state.editor.hasFocus() && state.editor.isShown())return true;dialog.dismiss();return false;}
+    }
+    /** 24dp monochrome glyph inside the same 40dp target as YouTube's timestamp icon. */
+    private static final class GifIcon extends View {
+        final EditText editor;final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
+        GifIcon(EditText editor){
+            super(editor.getContext());this.editor=editor;setClickable(true);
+            GradientDrawable mask=new GradientDrawable();mask.setShape(GradientDrawable.OVAL);mask.setColor(0xffffffff);
+            setBackground(new RippleDrawable(ColorStateList.valueOf((editor.getCurrentTextColor()&0x00ffffff)|0x24000000),null,mask));
+        }
+        protected void onDraw(Canvas canvas){
+            super.onDraw(canvas);float density=getResources().getDisplayMetrics().density;
+            float cx=getWidth()/2f,cy=getHeight()/2f;
+            paint.setColor(editor.getCurrentTextColor());paint.setAlpha(190);paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(1.6f*density);
+            canvas.drawRoundRect(new RectF(cx-12*density,cy-9*density,cx+12*density,cy+9*density),3*density,3*density,paint);
+            paint.setStyle(Paint.Style.FILL);paint.setTypeface(Typeface.create("sans-serif",Typeface.BOLD));paint.setTextSize(9*density);paint.setTextAlign(Paint.Align.CENTER);
+            Paint.FontMetrics metrics=paint.getFontMetrics();canvas.drawText("GIF",cx,cy-(metrics.ascent+metrics.descent)/2,paint);
+        }
     }
     private static final class Animated extends View {
         Movie movie;long start;
